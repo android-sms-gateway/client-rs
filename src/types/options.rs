@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use url::Url;
 
 use super::inbox::IncomingMessageType;
 
@@ -57,6 +56,8 @@ pub struct ListInboxOptions {
     pub to: Option<DateTime<Utc>>,
     /// Filter by device ID.
     pub device_id: Option<String>,
+    /// Include attachment metadata in response (for MMS messages).
+    pub include_attachments: Option<bool>,
 }
 
 impl ListInboxOptions {
@@ -118,6 +119,11 @@ impl ListInboxOptions {
         self.device_id = Some(val.into());
         self
     }
+
+    pub fn with_include_attachments(mut self, val: bool) -> Self {
+        self.include_attachments = Some(val);
+        self
+    }
 }
 
 impl ToQueryParams for ListInboxOptions {
@@ -143,6 +149,9 @@ impl ToQueryParams for ListInboxOptions {
         }
         if let Some(ref val) = self.device_id {
             params.push(("deviceId".to_string(), val.clone()));
+        }
+        if let Some(val) = self.include_attachments {
+            params.push(("includeAttachments".to_string(), val.to_string()));
         }
         params
     }
@@ -295,10 +304,10 @@ pub trait ToQueryParams {
         if pairs.is_empty() {
             return String::new();
         }
-        let mut url = Url::parse("http://example.com").unwrap();
+        let mut serializer = url::form_urlencoded::Serializer::new(String::new());
         for (key, value) in &pairs {
-            url.query_pairs_mut().append_pair(key, value);
+            serializer.append_pair(key, value);
         }
-        url.query().unwrap_or_default().to_string()
+        serializer.finish()
     }
 }

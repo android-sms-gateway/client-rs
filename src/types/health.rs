@@ -16,12 +16,10 @@ pub struct HealthResponse {
 
 /// The health status of a component.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
 pub enum HealthStatus {
-    #[serde(rename = "pass")]
     Pass,
-    #[serde(rename = "warn")]
     Warn,
-    #[serde(rename = "fail")]
     Fail,
     #[serde(other)]
     Unknown,

@@ -5,15 +5,10 @@ use serde::{Deserialize, Serialize};
 /// The type of a push notification event.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PushEventType {
-    #[serde(rename = "MessageEnqueued")]
     MessageEnqueued,
-    #[serde(rename = "MessageCancelled")]
     MessageCancelled,
-    #[serde(rename = "WebhooksUpdated")]
     WebhooksUpdated,
-    #[serde(rename = "MessagesExportRequested")]
     MessagesExportRequested,
-    #[serde(rename = "SettingsUpdated")]
     SettingsUpdated,
 }
 

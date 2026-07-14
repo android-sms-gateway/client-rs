@@ -1,14 +1,6 @@
 use android_sms_gateway::types::*;
 
 #[test]
-fn test_processing_state_serde() {
-    let json = "\"Pending\"";
-    let state: ProcessingState = serde_json::from_str(json).unwrap();
-    assert_eq!(state, ProcessingState::Pending);
-    assert_eq!(serde_json::to_string(&state).unwrap(), json);
-}
-
-#[test]
 fn test_processing_state_all_variants() {
     for (json, expected) in [
         ("\"Pending\"", ProcessingState::Pending),
