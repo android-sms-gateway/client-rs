@@ -83,7 +83,10 @@ impl Encryptor {
         let iterations = parse_params(parts[2])
             .get("i")
             .and_then(|v| v.parse::<u32>().ok())
-            .ok_or_else(|| Error::Validation("Missing iteration count".into()))?;
+            .filter(|i| (1_000..=1_000_000).contains(i))
+            .ok_or_else(|| {
+                Error::Validation("iterations must be between 1000 and 1000000".into())
+            })?;
 
         let salt = base64::engine::general_purpose::STANDARD
             .decode(parts[3])

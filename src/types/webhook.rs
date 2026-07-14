@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// A webhook event type.
@@ -80,6 +81,154 @@ impl Webhook {
             ));
         }
 
+        let parsed = url::Url::parse(&self.url)
+            .map_err(|_| crate::Error::Validation("invalid url".to_string()))?;
+        if parsed.host_str().is_none_or(|h| h.is_empty()) {
+            return Err(crate::Error::Validation(
+                "url must have a valid host".to_string(),
+            ));
+        }
+
         Ok(())
     }
+}
+
+/// Base fields present on all message-related webhook payloads.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SmsEventPayload {
+    /// The unique identifier of the message.
+    pub message_id: String,
+    /// The phone number of the sender (incoming) or recipient (outgoing).
+    pub phone_number: String,
+    /// The phone number of the message sender.
+    pub sender: String,
+    /// The phone number of the message recipient.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recipient: Option<String>,
+    /// The SIM card number that sent or received the message.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sim_number: Option<u8>,
+}
+
+/// Payload of an `sms:received` event.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SmsReceivedPayload {
+    #[serde(flatten)]
+    pub base: SmsEventPayload,
+    /// The content of the SMS message received.
+    pub message: String,
+    /// The timestamp when the SMS message was received.
+    pub received_at: DateTime<Utc>,
+}
+
+/// Payload of an `sms:sent` event.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SmsSentPayload {
+    #[serde(flatten)]
+    pub base: SmsEventPayload,
+    /// The timestamp when the SMS message was sent.
+    pub sent_at: DateTime<Utc>,
+}
+
+/// Payload of an `sms:delivered` event.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SmsDeliveredPayload {
+    #[serde(flatten)]
+    pub base: SmsEventPayload,
+    /// The timestamp when the SMS message was delivered.
+    pub delivered_at: DateTime<Utc>,
+}
+
+/// Payload of an `sms:cancelled` event.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SmsCancelledPayload {
+    #[serde(flatten)]
+    pub base: SmsEventPayload,
+    /// The timestamp when the SMS message was cancelled.
+    pub cancelled_at: DateTime<Utc>,
+}
+
+/// Payload of an `sms:failed` event.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SmsFailedPayload {
+    #[serde(flatten)]
+    pub base: SmsEventPayload,
+    /// The timestamp when the SMS message failed.
+    pub failed_at: DateTime<Utc>,
+    /// The reason for the failure.
+    pub reason: String,
+}
+
+/// Payload of an `sms:data-received` event.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SmsDataReceivedPayload {
+    #[serde(flatten)]
+    pub base: SmsEventPayload,
+    /// Base64-encoded content of the data SMS received.
+    pub data: String,
+    /// The timestamp when the data SMS was received.
+    pub received_at: DateTime<Utc>,
+}
+
+/// Payload of an `mms:received` event (MMS notification, not yet downloaded).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MmsReceivedPayload {
+    #[serde(flatten)]
+    pub base: SmsEventPayload,
+    /// Unique MMS transaction identifier.
+    pub transaction_id: String,
+    /// Message subject line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject: Option<String>,
+    /// MMS content classification.
+    pub content_class: String,
+    /// Attachment size in bytes.
+    pub size: i64,
+    /// The timestamp when the MMS message was received.
+    pub received_at: DateTime<Utc>,
+}
+
+/// Metadata for a non-text MMS part (attachment).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MmsDownloadedAttachment {
+    /// The `_id` from `content://mms/part`.
+    pub part_id: i32,
+    /// MIME type of the attachment (e.g. `image/jpeg`).
+    pub content_type: String,
+    /// Filename of the attachment, if present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Base64-encoded attachment data, if available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data: Option<String>,
+    /// Size in bytes, if known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<i64>,
+}
+
+/// Payload of an `mms:downloaded` event (fully downloaded MMS with attachments).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MmsDownloadedPayload {
+    #[serde(flatten)]
+    pub base: SmsEventPayload,
+    /// Message subject line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject: Option<String>,
+    /// Aggregated text content of the MMS message.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+    /// Metadata for non-text MMS parts, including optional Base64 content.
+    pub attachments: Vec<MmsDownloadedAttachment>,
+    /// The timestamp when the MMS message was received.
+    pub received_at: DateTime<Utc>,
 }

@@ -3,14 +3,11 @@ use serde::{Deserialize, Serialize};
 
 /// The type of an incoming message.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum IncomingMessageType {
-    #[serde(rename = "SMS")]
     Sms,
-    #[serde(rename = "DATA_SMS")]
     DataSms,
-    #[serde(rename = "MMS")]
     Mms,
-    #[serde(rename = "MMS_DOWNLOADED")]
     MmsDownloaded,
     #[serde(other)]
     Other,
@@ -36,6 +33,23 @@ pub struct IncomingMessage {
     pub content_preview: String,
     /// When the message was received.
     pub created_at: DateTime<Utc>,
+    /// MMS attachment metadata (only present when `include_attachments` is true).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attachments: Option<Vec<IncomingMessageAttachment>>,
+}
+
+/// Metadata for an MMS attachment returned by the inbox API.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IncomingMessageAttachment {
+    /// Part ID of the attachment, corresponding to the `_id` in `content://mms/part`.
+    pub part_id: i32,
+    /// Display name of the attachment file.
+    pub name: String,
+    /// Size of the attachment in bytes.
+    pub size: i64,
+    /// MIME type of the attachment (e.g. `image/jpeg`).
+    pub content_type: String,
 }
 
 /// Request to refresh the inbox and pull new messages from the device.

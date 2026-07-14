@@ -69,6 +69,20 @@ impl HttpTransport {
         Ok(())
     }
 
+    pub async fn request_bytes<T>(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&T>,
+    ) -> Result<Vec<u8>, Error>
+    where
+        T: Serialize,
+    {
+        let resp = self.execute(method, path, body).await?;
+        let bytes = resp.bytes().await?.to_vec();
+        Ok(bytes)
+    }
+
     pub(crate) async fn request_json_custom_auth<T, R>(
         &self,
         method: Method,

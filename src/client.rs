@@ -65,12 +65,11 @@ impl Client {
             }
         };
 
-        let http_client = config.http_client.unwrap_or_else(|| {
+        let http_client = config.http_client.map(Ok).unwrap_or_else(|| {
             reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(30))
                 .build()
-                .unwrap_or_default()
-        });
+        })?;
         let user_agent = format!("android-sms-gateway/{} (client; rust)", crate::VERSION);
 
         Ok(Self {
@@ -94,6 +93,7 @@ impl Client {
         message: &Message,
         options: &SendOptions,
     ) -> Result<MessageState, Error> {
+        message.validate()?;
         let query = options.to_url_query();
         let path = build_path("/messages", &query);
 
@@ -198,6 +198,7 @@ impl Client {
 
     /// Registers a new webhook.
     pub async fn register_webhook(&self, webhook: &Webhook) -> Result<Webhook, Error> {
+        webhook.validate()?;
         self.transport
             .request_json(Method::POST, "/webhooks", Some(webhook))
             .await
@@ -299,6 +300,24 @@ impl Client {
     pub async fn export_inbox(&self, request: &MessagesExportRequest) -> Result<(), Error> {
         self.transport
             .request_empty(Method::POST, "/inbox/export", Some(request))
+            .await
+    }
+
+    /// Downloads a specific MMS attachment by message ID and part ID.
+    ///
+    /// Returns the raw attachment bytes (e.g. image, audio, video).
+    pub async fn download_attachment(
+        &self,
+        message_id: &str,
+        part_id: i32,
+    ) -> Result<Vec<u8>, Error> {
+        let path = format!(
+            "/inbox/{}/attachments/{}",
+            encode_path_segment(message_id),
+            part_id
+        );
+        self.transport
+            .request_bytes::<()>(Method::GET, &path, None)
             .await
     }
 }

@@ -18,10 +18,9 @@ pub struct Device {
 
 /// Information about a SIM card installed in a device.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SimCard {
-    #[serde(rename = "slotIndex")]
     pub slot_index: i32,
-    #[serde(rename = "simNumber")]
     pub sim_number: i32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phone_number: Option<String>,
