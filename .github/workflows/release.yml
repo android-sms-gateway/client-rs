@@ -14,6 +14,10 @@ jobs:
         with:
           cache: false
       - run: cargo test --all-features
-      - run: cargo publish
+      - name: Install cargo-edit
+        run: cargo install cargo-edit
+      - name: Set version from tag
+        run: cargo set-version "${GITHUB_REF_NAME#v}"
+      - run: cargo publish --allow-dirty
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

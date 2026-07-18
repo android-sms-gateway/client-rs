@@ -2,7 +2,7 @@
 name = "android-sms-gateway"
 version = "0.1.0"
 edition = "2021"
-description = "Rust client library for Android SMS Gateway API"
+description = "Rust client library for SMSGate API"
 authors = ["Aleksandr Soloshenko"]
 license = "Apache-2.0"
 repository = "https://github.com/android-sms-gateway/client-rs"
