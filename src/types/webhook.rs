@@ -20,6 +20,10 @@ impl WebhookEvent {
     pub const MMS_RECEIVED: &'static str = "mms:received";
     pub const MMS_DOWNLOADED: &'static str = "mms:downloaded";
     pub const APP_STARTED: &'static str = "app:started";
+    pub const SMS_BATCH_RECEIVED: &'static str = "sms:batch:received";
+    pub const SMS_BATCH_DATA_RECEIVED: &'static str = "sms:batch:data-received";
+    pub const MMS_BATCH_RECEIVED: &'static str = "mms:batch:received";
+    pub const MMS_BATCH_DOWNLOADED: &'static str = "mms:batch:downloaded";
 
     /// Creates a new webhook event type.
     pub fn new(s: impl Into<String>) -> Self {
@@ -44,6 +48,10 @@ pub const WEBHOOK_EVENT_TYPES: &[&str] = &[
     WebhookEvent::MMS_RECEIVED,
     WebhookEvent::MMS_DOWNLOADED,
     WebhookEvent::APP_STARTED,
+    WebhookEvent::SMS_BATCH_RECEIVED,
+    WebhookEvent::SMS_BATCH_DATA_RECEIVED,
+    WebhookEvent::MMS_BATCH_RECEIVED,
+    WebhookEvent::MMS_BATCH_DOWNLOADED,
 ];
 
 /// Returns `true` if the string is a valid webhook event type.
@@ -231,4 +239,40 @@ pub struct MmsDownloadedPayload {
     pub attachments: Vec<MmsDownloadedAttachment>,
     /// The timestamp when the MMS message was received.
     pub received_at: DateTime<Utc>,
+}
+
+/// Payload of an `sms:batch:received` event.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SmsBatchReceivedPayload {
+    /// The ordered list of received SMS messages.
+    #[serde(default)]
+    pub messages: Vec<SmsReceivedPayload>,
+}
+
+/// Payload of an `sms:batch:data-received` event.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SmsBatchDataReceivedPayload {
+    /// The ordered list of received data SMS messages.
+    #[serde(default)]
+    pub messages: Vec<SmsDataReceivedPayload>,
+}
+
+/// Payload of an `mms:batch:received` event.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MmsBatchReceivedPayload {
+    /// The ordered list of received MMS messages.
+    #[serde(default)]
+    pub messages: Vec<MmsReceivedPayload>,
+}
+
+/// Payload of an `mms:batch:downloaded` event.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MmsBatchDownloadedPayload {
+    /// The ordered list of downloaded MMS messages.
+    #[serde(default)]
+    pub messages: Vec<MmsDownloadedPayload>,
 }

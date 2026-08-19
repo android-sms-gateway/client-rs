@@ -52,6 +52,17 @@ pub struct IncomingMessageAttachment {
     pub content_type: String,
 }
 
+/// The delivery mode for webhooks.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WebhookDelivery {
+    #[serde(rename = "Disabled")]
+    Disabled,
+    #[serde(rename = "Individual")]
+    Individual,
+    #[serde(rename = "Batch")]
+    Batch,
+}
+
 /// Request to refresh the inbox and pull new messages from the device.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -67,8 +78,13 @@ pub struct InboxRefreshRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message_types: Option<Vec<IncomingMessageType>>,
     /// Whether to trigger webhooks for pulled messages.
-    #[serde(default)]
+    ///
+    /// Deprecated: use `webhook_delivery` instead.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub trigger_webhooks: bool,
+    /// Delivery mode for webhooks (overrides `trigger_webhooks` when set).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub webhook_delivery: Option<WebhookDelivery>,
 }
 
 /// Request to export inbox messages via webhooks.
