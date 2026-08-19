@@ -338,3 +338,135 @@ fn test_message_state_validate_invalid_state_key() {
     };
     assert!(state.validate().is_err());
 }
+
+#[test]
+fn test_webhook_delivery_serde() {
+    for (json, expected) in [
+        ("\"Disabled\"", WebhookDelivery::Disabled),
+        ("\"Individual\"", WebhookDelivery::Individual),
+        ("\"Batch\"", WebhookDelivery::Batch),
+    ] {
+        let val: WebhookDelivery = serde_json::from_str(json).unwrap();
+        assert_eq!(val, expected);
+        assert_eq!(serde_json::to_string(&val).unwrap(), json);
+    }
+}
+
+fn test_refresh_request(
+    trigger_webhooks: bool,
+    webhook_delivery: Option<WebhookDelivery>,
+) -> InboxRefreshRequest {
+    use chrono::{TimeZone, Utc};
+    InboxRefreshRequest {
+        device_id: Some("dev1".into()),
+        since: Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+        until: Utc.with_ymd_and_hms(2024, 1, 1, 23, 59, 59).unwrap(),
+        message_types: Some(vec![IncomingMessageType::Sms, IncomingMessageType::Mms]),
+        trigger_webhooks,
+        webhook_delivery,
+    }
+}
+
+#[test]
+fn test_inbox_refresh_request_serialization() {
+    // All fields camelCase, defaults omitted.
+    let req = test_refresh_request(false, None);
+    let obj = serde_json::to_value(&req).unwrap();
+    let obj = obj.as_object().unwrap();
+    assert_eq!(obj["deviceId"], "dev1");
+    assert_eq!(obj["since"], "2024-01-01T00:00:00Z");
+    assert_eq!(obj["until"], "2024-01-01T23:59:59Z");
+    assert_eq!(obj["messageTypes"], serde_json::json!(["SMS", "MMS"]));
+    assert!(!obj.contains_key("triggerWebhooks"));
+    assert!(!obj.contains_key("webhookDelivery"));
+
+    // triggerWebhooks emitted only when true.
+    let req = test_refresh_request(true, None);
+    let obj = serde_json::to_value(&req).unwrap();
+    let obj = obj.as_object().unwrap();
+    assert_eq!(obj["triggerWebhooks"], true);
+    assert!(!obj.contains_key("webhookDelivery"));
+
+    // webhookDelivery emitted when set; triggerWebhooks still omitted when false.
+    let req = test_refresh_request(false, Some(WebhookDelivery::Batch));
+    let obj = serde_json::to_value(&req).unwrap();
+    let obj = obj.as_object().unwrap();
+    assert_eq!(obj["webhookDelivery"], "Batch");
+    assert!(!obj.contains_key("triggerWebhooks"));
+
+    // Both set: both emitted.
+    let req = test_refresh_request(true, Some(WebhookDelivery::Individual));
+    let obj = serde_json::to_value(&req).unwrap();
+    let obj = obj.as_object().unwrap();
+    assert_eq!(obj["triggerWebhooks"], true);
+    assert_eq!(obj["webhookDelivery"], "Individual");
+}
+
+#[test]
+fn test_inbox_refresh_request_deserialization() {
+    let req: InboxRefreshRequest = serde_json::from_str(
+        r#"{"deviceId":"dev1","since":"2024-01-01T00:00:00Z","until":"2024-01-01T23:59:59Z","messageTypes":["SMS"],"triggerWebhooks":true,"webhookDelivery":"Batch"}"#,
+    )
+    .unwrap();
+    assert_eq!(req.device_id.as_deref(), Some("dev1"));
+    assert!(req.trigger_webhooks);
+    assert_eq!(req.webhook_delivery, Some(WebhookDelivery::Batch));
+}
+
+#[test]
+fn test_batch_webhook_event_constants() {
+    assert_eq!(WebhookEvent::SMS_BATCH_RECEIVED, "sms:batch:received");
+    assert_eq!(
+        WebhookEvent::SMS_BATCH_DATA_RECEIVED,
+        "sms:batch:data-received"
+    );
+    assert_eq!(WebhookEvent::MMS_BATCH_RECEIVED, "mms:batch:received");
+    assert_eq!(WebhookEvent::MMS_BATCH_DOWNLOADED, "mms:batch:downloaded");
+    assert!(WEBHOOK_EVENT_TYPES.contains(&WebhookEvent::SMS_BATCH_RECEIVED));
+    assert!(WEBHOOK_EVENT_TYPES.contains(&WebhookEvent::SMS_BATCH_DATA_RECEIVED));
+    assert!(WEBHOOK_EVENT_TYPES.contains(&WebhookEvent::MMS_BATCH_RECEIVED));
+    assert!(WEBHOOK_EVENT_TYPES.contains(&WebhookEvent::MMS_BATCH_DOWNLOADED));
+    assert!(is_valid_webhook_event(WebhookEvent::SMS_BATCH_RECEIVED));
+    assert!(is_valid_webhook_event(WebhookEvent::MMS_BATCH_DOWNLOADED));
+}
+
+#[test]
+fn test_batch_webhook_payloads_deserialization() {
+    let json = r#"{"messages":[{"messageId":"m1","phoneNumber":"+79990001234","sender":"+79990005678","message":"Hello","receivedAt":"2024-01-01T00:00:00Z"}]}"#;
+    let payload: SmsBatchReceivedPayload = serde_json::from_str(json).unwrap();
+    assert_eq!(payload.messages.len(), 1);
+    assert_eq!(payload.messages[0].message, "Hello");
+    assert_eq!(payload.messages[0].base.phone_number, "+79990001234");
+
+    let json = r#"{"messages":[{"messageId":"m1","phoneNumber":"+79990001234","sender":"+79990005678","data":"AQID","receivedAt":"2024-01-01T00:00:00Z"}]}"#;
+    let payload: SmsBatchDataReceivedPayload = serde_json::from_str(json).unwrap();
+    assert_eq!(payload.messages.len(), 1);
+    assert_eq!(payload.messages[0].data, "AQID");
+
+    let json = r#"{"messages":[{"messageId":"m1","phoneNumber":"+79990001234","sender":"+79990005678","transactionId":"t1","subject":"Hi","contentClass":"MMS","size":1024,"receivedAt":"2024-01-01T00:00:00Z"}]}"#;
+    let payload: MmsBatchReceivedPayload = serde_json::from_str(json).unwrap();
+    assert_eq!(payload.messages.len(), 1);
+    assert_eq!(payload.messages[0].transaction_id, "t1");
+
+    let json = r#"{"messages":[{"messageId":"m1","phoneNumber":"+79990001234","sender":"+79990005678","subject":"Hi","attachments":[{"partId":1,"contentType":"image/jpeg"}],"receivedAt":"2024-01-01T00:00:00Z"}]}"#;
+    let payload: MmsBatchDownloadedPayload = serde_json::from_str(json).unwrap();
+    assert_eq!(payload.messages.len(), 1);
+    assert_eq!(
+        payload.messages[0].attachments[0].content_type,
+        "image/jpeg"
+    );
+}
+
+#[test]
+fn test_batch_webhook_payloads_empty_and_missing_messages() {
+    // Empty messages array.
+    let payload: SmsBatchReceivedPayload = serde_json::from_str(r#"{"messages":[]}"#).unwrap();
+    assert!(payload.messages.is_empty());
+    // Missing "messages" key tolerated (parity with Go nil slice).
+    let payload: SmsBatchDataReceivedPayload = serde_json::from_str(r#"{}"#).unwrap();
+    assert!(payload.messages.is_empty());
+    let payload: MmsBatchReceivedPayload = serde_json::from_str(r#"{}"#).unwrap();
+    assert!(payload.messages.is_empty());
+    let payload: MmsBatchDownloadedPayload = serde_json::from_str(r#"{}"#).unwrap();
+    assert!(payload.messages.is_empty());
+}
