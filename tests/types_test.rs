@@ -20,19 +20,8 @@ fn test_processing_state_all_variants() {
 #[test]
 fn test_message_validate_requires_one_content_type() {
     let msg = Message {
-        id: None,
-        device_id: None,
-        message: None,
-        text_message: None,
-        data_message: None,
         phone_numbers: vec!["123".to_string()],
-        is_encrypted: false,
-        sim_number: None,
-        with_delivery_report: None,
-        priority: PRIORITY_DEFAULT,
-        ttl: None,
-        valid_until: None,
-        schedule_at: None,
+        ..Default::default()
     };
     assert!(msg.validate().is_err());
 }
@@ -102,6 +91,194 @@ fn test_message_get_data_message() {
     assert_eq!(dm.port, 53739);
 }
 
+/// Locked canonical MMS fixture (parity with client-go TestMmsMessage_MarshalFixture).
+const MMS_FIXTURE_JSON: &str = r#"{"subject":"Hello","text":"World","attachments":[{"contentType":"image/png","name":"picture.png","data":"BASE64DATA"}]}"#;
+
+#[test]
+fn test_mms_attachment_serde_roundtrip() {
+    let attachment = MmsAttachment {
+        content_type: "image/png".into(),
+        name: Some("picture.png".into()),
+        data: "BASE64DATA".into(),
+    };
+    let json = serde_json::to_string(&attachment).unwrap();
+    assert_eq!(
+        json,
+        r#"{"contentType":"image/png","name":"picture.png","data":"BASE64DATA"}"#
+    );
+    let deserialized: MmsAttachment = serde_json::from_str(&json).unwrap();
+    assert_eq!(deserialized, attachment);
+
+    // `name` omitted when None (Go omitempty parity).
+    let no_name = MmsAttachment {
+        name: None,
+        ..attachment
+    };
+    let json = serde_json::to_string(&no_name).unwrap();
+    assert_eq!(json, r#"{"contentType":"image/png","data":"BASE64DATA"}"#);
+}
+
+#[test]
+fn test_mms_message_serde_roundtrip_fixture() {
+    let mms = MmsMessage {
+        subject: Some("Hello".into()),
+        text: Some("World".into()),
+        attachments: vec![MmsAttachment {
+            content_type: "image/png".into(),
+            name: Some("picture.png".into()),
+            data: "BASE64DATA".into(),
+        }],
+    };
+    let json = serde_json::to_string(&mms).unwrap();
+    assert_eq!(json, MMS_FIXTURE_JSON);
+    let deserialized: MmsMessage = serde_json::from_str(&json).unwrap();
+    assert_eq!(deserialized, mms);
+}
+
+#[test]
+fn test_mms_message_empty_attachments_omitted() {
+    let mms = MmsMessage {
+        subject: Some("Hello".into()),
+        text: Some("World".into()),
+        attachments: vec![],
+    };
+    let json = serde_json::to_string(&mms).unwrap();
+    assert_eq!(json, r#"{"subject":"Hello","text":"World"}"#);
+    assert!(!json.contains("attachments"));
+
+    // Only subject/text omitted when None.
+    let bare = MmsMessage {
+        attachments: vec![MmsAttachment {
+            content_type: "image/png".into(),
+            name: None,
+            data: "BASE64DATA".into(),
+        }],
+        ..Default::default()
+    };
+    let json = serde_json::to_string(&bare).unwrap();
+    assert_eq!(
+        json,
+        r#"{"attachments":[{"contentType":"image/png","data":"BASE64DATA"}]}"#
+    );
+}
+
+#[test]
+fn test_message_with_mms_message_serde() {
+    let msg = Message {
+        mms_message: Some(MmsMessage {
+            subject: Some("Hello".into()),
+            text: Some("World".into()),
+            attachments: vec![MmsAttachment {
+                content_type: "image/png".into(),
+                name: Some("picture.png".into()),
+                data: "BASE64DATA".into(),
+            }],
+        }),
+        phone_numbers: vec!["123".into()],
+        ..Default::default()
+    };
+    let json = serde_json::to_string(&msg).unwrap();
+    assert!(json.contains(MMS_FIXTURE_JSON));
+    assert!(json.contains(r#""mmsMessage":"#));
+
+    // mmsMessage omitted when None.
+    let plain = Message {
+        phone_numbers: vec!["123".into()],
+        ..Default::default()
+    };
+    let json = serde_json::to_string(&plain).unwrap();
+    assert!(!json.contains("mmsMessage"));
+
+    assert!(msg.validate().is_ok());
+}
+
+#[test]
+fn test_message_validate_mms_message() {
+    let mms = MmsMessage {
+        subject: Some("Hello".into()),
+        text: Some("World".into()),
+        attachments: vec![],
+    };
+    let only_mms = Message {
+        mms_message: Some(mms.clone()),
+        phone_numbers: vec!["123".into()],
+        ..Default::default()
+    };
+    assert!(only_mms.validate().is_ok());
+
+    // MMS combined with another content type is a conflict.
+    let conflict = Message {
+        mms_message: Some(mms),
+        text_message: Some(TextMessage { text: "hi".into() }),
+        phone_numbers: vec!["123".into()],
+        ..Default::default()
+    };
+    assert!(conflict.validate().is_err());
+}
+
+#[test]
+fn test_message_validate_mms_subject_only_rejected() {
+    // Go parity: subject alone is not a valid MMS payload
+    // (client-go MmsMessage.Validate: text or >=1 attachment required).
+    let msg = Message {
+        mms_message: Some(MmsMessage {
+            subject: Some("Hello".into()),
+            text: None,
+            attachments: vec![],
+        }),
+        phone_numbers: vec!["123".into()],
+        ..Default::default()
+    };
+    let err = msg.validate().unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("mmsMessage must specify either text or at least one attachment"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn test_message_validate_mms_empty_rejected() {
+    let msg = Message {
+        mms_message: Some(MmsMessage::default()),
+        phone_numbers: vec!["123".into()],
+        ..Default::default()
+    };
+    assert!(msg.validate().is_err());
+}
+
+#[test]
+fn test_message_validate_mms_text_only_accepted() {
+    let msg = Message {
+        mms_message: Some(MmsMessage {
+            subject: Some("Hello".into()),
+            text: Some("World".into()),
+            attachments: vec![],
+        }),
+        phone_numbers: vec!["123".into()],
+        ..Default::default()
+    };
+    assert!(msg.validate().is_ok());
+}
+
+#[test]
+fn test_message_validate_mms_attachments_only_accepted() {
+    let msg = Message {
+        mms_message: Some(MmsMessage {
+            subject: Some("Hello".into()),
+            text: None,
+            attachments: vec![MmsAttachment {
+                content_type: "image/png".into(),
+                name: None,
+                data: "BASE64DATA".into(),
+            }],
+        }),
+        phone_numbers: vec!["123".into()],
+        ..Default::default()
+    };
+    assert!(msg.validate().is_ok());
+}
+
 #[test]
 fn test_message_serde_roundtrip() {
     let msg = Message {
@@ -110,6 +287,7 @@ fn test_message_serde_roundtrip() {
         message: Some("Hello World!".into()),
         text_message: None,
         data_message: None,
+        mms_message: None,
         phone_numbers: vec!["79990001234".into()],
         is_encrypted: false,
         sim_number: None,
@@ -138,6 +316,7 @@ fn test_message_state_validate_valid() {
         states: HashMap::new(),
         text_message: None,
         data_message: None,
+        mms_message: None,
         hashed_message: None,
     };
     assert!(state.validate().is_ok());
@@ -334,6 +513,7 @@ fn test_message_state_validate_invalid_state_key() {
         states,
         text_message: None,
         data_message: None,
+        mms_message: None,
         hashed_message: None,
     };
     assert!(state.validate().is_err());

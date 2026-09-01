@@ -50,6 +50,36 @@ pub struct DataMessage {
     pub port: u16,
 }
 
+/// A single attachment of an MMS message.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MmsAttachment {
+    /// The MIME type of the attachment (e.g. `image/png`).
+    pub content_type: String,
+    /// The optional file name of the attachment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Base64-encoded attachment content.
+    pub data: String,
+}
+
+/// An MMS message payload.
+///
+/// At least one of `text` or `attachments` must be set.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MmsMessage {
+    /// The optional subject of the MMS.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject: Option<String>,
+    /// The optional text body of the MMS.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    /// The list of attachments. Omitted when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<MmsAttachment>,
+}
+
 /// A reference to a hashed message (content not included for privacy).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HashedMessage {
@@ -57,9 +87,10 @@ pub struct HashedMessage {
     pub hash: String,
 }
 
-/// An SMS message to be sent.
+/// A message to be sent.
 ///
-/// At least one of `message`, `text_message`, or `data_message` must be set.
+/// At least one of `text_message`, `data_message`, or `mms_message`
+/// must be set.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Message {
@@ -80,6 +111,9 @@ pub struct Message {
     /// Data message payload.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data_message: Option<DataMessage>,
+    /// MMS message payload.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mms_message: Option<MmsMessage>,
 
     /// List of recipient phone numbers.
     pub phone_numbers: Vec<String>,
@@ -126,6 +160,11 @@ impl Message {
         self.data_message.as_ref()
     }
 
+    /// Returns the MMS message payload, if set.
+    pub fn get_mms_message(&self) -> Option<&MmsMessage> {
+        self.mms_message.as_ref()
+    }
+
     /// Validates the message structure.
     ///
     /// Checks that exactly one content type is set and that no conflicting
@@ -137,17 +176,28 @@ impl Message {
             .map(|s| !s.is_empty())
             .unwrap_or(false) as u8
             + self.text_message.is_some() as u8
-            + self.data_message.is_some() as u8;
+            + self.data_message.is_some() as u8
+            + self.mms_message.is_some() as u8;
 
         if filled == 0 {
             return Err(crate::Error::Validation(
-                "must specify exactly one of: textMessage or dataMessage".to_string(),
+                "must specify exactly one of: textMessage, dataMessage or mmsMessage".to_string(),
             ));
         }
         if filled > 1 {
             return Err(crate::Error::ConflictFields(
-                "must specify exactly one of: textMessage or dataMessage".to_string(),
+                "must specify exactly one of: textMessage, dataMessage or mmsMessage".to_string(),
             ));
+        }
+
+        if let Some(ref mms) = self.mms_message {
+            let has_text = mms.text.as_ref().map(|t| !t.is_empty()).unwrap_or(false);
+            let has_attachments = !mms.attachments.is_empty();
+            if !has_text && !has_attachments {
+                return Err(crate::Error::Validation(
+                    "mmsMessage must specify either text or at least one attachment".to_string(),
+                ));
+            }
         }
 
         if self.ttl.is_some() && self.valid_until.is_some() {
@@ -210,6 +260,9 @@ pub struct MessageState {
     /// Data message content (present when `includeContent=true`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data_message: Option<DataMessage>,
+    /// MMS message content (present when `includeContent=true`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mms_message: Option<MmsMessage>,
     /// Hashed message reference (present when `is_hashed=true`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hashed_message: Option<HashedMessage>,
