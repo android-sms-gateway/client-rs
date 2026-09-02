@@ -136,6 +136,7 @@ fn test_message_state_validate_valid() {
         is_encrypted: false,
         recipients: vec![],
         states: HashMap::new(),
+        created_at: None,
         text_message: None,
         data_message: None,
         hashed_message: None,
@@ -332,6 +333,7 @@ fn test_message_state_validate_invalid_state_key() {
         is_encrypted: false,
         recipients: vec![],
         states,
+        created_at: None,
         text_message: None,
         data_message: None,
         hashed_message: None,
@@ -469,4 +471,71 @@ fn test_batch_webhook_payloads_empty_and_missing_messages() {
     assert!(payload.messages.is_empty());
     let payload: MmsBatchDownloadedPayload = serde_json::from_str(r#"{}"#).unwrap();
     assert!(payload.messages.is_empty());
+}
+
+fn sample_message_state() -> MessageState {
+    use std::collections::HashMap;
+    MessageState {
+        id: "test".into(),
+        device_id: "dev".into(),
+        state: ProcessingState::Pending,
+        is_hashed: false,
+        is_encrypted: false,
+        recipients: vec![],
+        states: HashMap::new(),
+        created_at: None,
+        text_message: None,
+        data_message: None,
+        hashed_message: None,
+    }
+}
+
+#[test]
+fn test_message_state_deserialize_with_created_at() {
+    let json = r#"{"id":"test","deviceId":"dev","state":"Pending","isHashed":false,"isEncrypted":false,"recipients":[],"states":{},"createdAt":"2026-08-23T09:00:00Z"}"#;
+    let state: MessageState = serde_json::from_str(json).unwrap();
+    assert_eq!(
+        state.created_at,
+        Some(
+            "2026-08-23T09:00:00Z"
+                .parse::<chrono::DateTime<chrono::Utc>>()
+                .unwrap()
+        )
+    );
+}
+
+#[test]
+fn test_message_state_deserialize_without_created_at() {
+    let json = r#"{"id":"test","deviceId":"dev","state":"Pending","isHashed":false,"isEncrypted":false,"recipients":[],"states":{},"textMessage":{"text":"hi"}}"#;
+    let state: MessageState = serde_json::from_str(json).unwrap();
+    assert_eq!(state.created_at, None);
+    // Old payloads (no createdAt) must still fully deserialize.
+    assert_eq!(state.id, "test");
+    assert_eq!(state.state, ProcessingState::Pending);
+}
+
+#[test]
+fn test_message_state_serialize_created_at() {
+    // Set: key present as "createdAt" and value round-trips.
+    let state = sample_message_state();
+    let state = MessageState {
+        created_at: Some("2026-08-23T09:00:00Z".parse().unwrap()),
+        ..state
+    };
+    let json = serde_json::to_value(&state).unwrap();
+    assert_eq!(json["createdAt"], "2026-08-23T09:00:00Z");
+
+    // Unset: key omitted.
+    let state = sample_message_state();
+    let json = serde_json::to_value(&state).unwrap();
+    assert!(!json.as_object().unwrap().contains_key("createdAt"));
+}
+
+#[test]
+fn test_message_state_created_at_offset_normalization() {
+    // RFC 3339 with zone offset parses and normalizes to UTC.
+    let json = r#"{"id":"test","deviceId":"dev","state":"Pending","isHashed":false,"isEncrypted":false,"recipients":[],"states":{},"createdAt":"2026-08-23T12:00:00+03:00"}"#;
+    let state: MessageState = serde_json::from_str(json).unwrap();
+    let expected: chrono::DateTime<chrono::Utc> = "2026-08-23T09:00:00Z".parse().unwrap();
+    assert_eq!(state.created_at, Some(expected));
 }

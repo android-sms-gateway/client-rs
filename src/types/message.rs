@@ -204,6 +204,10 @@ pub struct MessageState {
     #[serde(default)]
     pub states: HashMap<String, DateTime<Utc>>,
 
+    /// When the message was created.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<DateTime<Utc>>,
+
     /// Text message content (present when `includeContent=true`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text_message: Option<TextMessage>,
