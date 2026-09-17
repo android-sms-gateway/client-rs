@@ -304,6 +304,24 @@ fn test_message_serde_roundtrip() {
 }
 
 #[test]
+fn test_message_priority_always_serialized() {
+    // Go wire parity: Message.Priority has no omitempty and always
+    // serializes (zero value 0); mirrors client-go `json:"priority"`.
+    let msg = Message {
+        message: Some("Hello".into()),
+        phone_numbers: vec!["123".into()],
+        ..Default::default()
+    };
+
+    let json = serde_json::to_string(&msg).unwrap();
+    assert!(
+        json.contains(r#""priority":0"#),
+        "priority 0 must be emitted: {}",
+        json
+    );
+}
+
+#[test]
 fn test_message_state_validate_valid() {
     use std::collections::HashMap;
     let state = MessageState {
