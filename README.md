@@ -24,7 +24,10 @@ An async-first Rust client for the [SMSGate](https://sms-gate.app) API: send and
     - [Basic Authentication](#basic-authentication)
     - [JWT Authentication](#jwt-authentication)
   - [🚀 Quickstart](#-quickstart)
+  - [⚙️ Configuration](#️-configuration)
   - [💻 Usage](#-usage)
+    - [Webhook signature verification](#webhook-signature-verification)
+    - [Message encryption](#message-encryption)
   - [📖 API Reference](#-api-reference)
   - [🤝 Contributing](#-contributing)
   - [📄 License](#-license)
@@ -33,7 +36,8 @@ An async-first Rust client for the [SMSGate](https://sms-gate.app) API: send and
 
 - Async-first with `tokio` and `reqwest`
 - Basic and JWT authentication; token generate, refresh, and revoke
-- Full API coverage: messages, inbox, devices, settings, webhooks, health, logs
+- Full API coverage: text, data, and MMS messages, inbox, devices, settings, webhooks, health, logs
+- Scheduling, TTL, delivery reports, and message priority
 - Webhook payload signature verification (HMAC-SHA256)
 - End-to-end encryption (AES-256-CBC + PBKDF2) behind the `encryption` feature
 - `rustls` TLS by default, no OpenSSL dependency (`native-tls` feature available)
@@ -106,9 +110,51 @@ async fn main() -> Result<(), android_sms_gateway::Error> {
 }
 ```
 
+## ⚙️ Configuration
+
+Build a `ClientConfig` with the fluent builder methods below; it is validated when the client is created. The default base URL is `https://api.sms-gate.app/3rdparty/v1`.
+
+```rust
+let config = ClientConfig::new()
+    .with_token("your-jwt-token")     // or .with_basic_auth("login", "password")
+    .with_base_url("https://gateway.example.com/3rdparty/v1") // private deployments
+    .with_http_client(reqwest::Client::new()); // advanced HTTP tuning
+```
+
+| Method             | Description                                                |
+| ------------------ | ---------------------------------------------------------- |
+| `with_token`       | JWT bearer token authentication                            |
+| `with_basic_auth`  | HTTP Basic authentication with username and password       |
+| `with_base_url`    | Custom API base URL, useful for private server deployments |
+| `with_http_client` | Custom `reqwest::Client` for advanced HTTP configuration   |
+
 ## 💻 Usage
 
-Beyond sending, the client covers message listing and cancellation, inbox listing and refresh, device management, settings, webhooks, logs, and the token lifecycle. See [src/client.rs](https://github.com/android-sms-gateway/client-rs/blob/master/src/client.rs) for the complete method list with signatures and [src/types](https://github.com/android-sms-gateway/client-rs/tree/master/src/types) for the domain models. Webhook signature verification lives in [src/webhook.rs](https://github.com/android-sms-gateway/client-rs/blob/master/src/webhook.rs), encryption in [src/encryption.rs](https://github.com/android-sms-gateway/client-rs/blob/master/src/encryption.rs).
+Beyond sending, the client covers message listing and cancellation, inbox listing and refresh, device management, settings, webhooks, logs, and the token lifecycle. See [src/client.rs](https://github.com/android-sms-gateway/client-rs/blob/master/src/client.rs) for the complete method list with signatures and [src/types](https://github.com/android-sms-gateway/client-rs/tree/master/src/types) for the domain models.
+
+### Webhook signature verification
+
+Verify that an incoming webhook was sent by the SMSGate device using HMAC-SHA256, with optional timestamp replay protection:
+
+```rust
+use android_sms_gateway::webhook::verify_signature;
+
+if verify_signature(&secret, &body, &timestamp, &signature, Some(300)) {
+    // request is authentic; timestamp is at most 300 seconds old
+}
+```
+
+### Message encryption
+
+With the `encryption` feature enabled, encrypt and decrypt message content with AES-256-CBC and PBKDF2-SHA1 key derivation:
+
+```rust
+use android_sms_gateway::encryption::Encryptor;
+
+let encryptor = Encryptor::new("my-passphrase");
+let encrypted = encryptor.encrypt("Hello, world!");
+let decrypted = encryptor.decrypt(&encrypted).unwrap();
+```
 
 ## 📖 API Reference
 
