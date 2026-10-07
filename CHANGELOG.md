@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### New Features
+#### Message creation timestamp
+- **`createdAt` in message states** — `MessageState.created_at` is an optional `DateTime<Utc>` carrying the message creation time. It is read from `createdAt` when present, normalized to UTC on parse (RFC 3339 offsets are accepted), and omitted from serialized output when `None`. Payloads without the field still deserialize.
+
 ## [0.3.0] - 2026-09-01
 
 ### New Features
