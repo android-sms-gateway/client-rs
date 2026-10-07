@@ -684,6 +684,7 @@ fn sample_message_state() -> MessageState {
         created_at: None,
         text_message: None,
         data_message: None,
+        mms_message: None,
         hashed_message: None,
     }
 }
