@@ -343,10 +343,22 @@ fn test_message_state_validate_valid() {
 
 #[test]
 fn test_device_serde() {
-    let json = r#"{"id":"dev1","name":"My Device","createdAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","lastSeen":"2024-01-01T00:00:00Z"}"#;
+    let json = r#"{"id":"dev1","name":"My Device","createdAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","lastSeen":"2024-01-01T00:00:00Z","state":"Disabled"}"#;
     let device: Device = serde_json::from_str(json).unwrap();
     assert_eq!(device.id, "dev1");
     assert_eq!(device.name, "My Device");
+    assert_eq!(device.state, DeviceState::Disabled);
+}
+
+#[test]
+fn test_device_state_defaults_to_active() {
+    let json = r#"{"id":"dev1","name":"My Device","createdAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","lastSeen":"2024-01-01T00:00:00Z"}"#;
+    let device: Device = serde_json::from_str(json).unwrap();
+
+    assert_eq!(device.state, DeviceState::Active);
+
+    let serialized = serde_json::to_value(device).unwrap();
+    assert_eq!(serialized["state"], "Active");
 }
 
 #[test]

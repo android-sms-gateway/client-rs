@@ -1,6 +1,16 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+/// The state of a registered device.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DeviceState {
+    #[serde(rename = "Active")]
+    #[default]
+    Active,
+    #[serde(rename = "Disabled")]
+    Disabled,
+}
+
 /// A registered device.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -12,6 +22,8 @@ pub struct Device {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deleted_at: Option<DateTime<Utc>>,
     pub last_seen: DateTime<Utc>,
+    #[serde(default)]
+    pub state: DeviceState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sim_cards: Option<Vec<SimCard>>,
 }
